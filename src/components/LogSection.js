@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, TouchableWithoutFeedback, StyleSheet, Image, TextInput, Platform, Keyboard, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, TouchableWithoutFeedback, StyleSheet, Image, TextInput, Platform, Keyboard, Alert, ActivityIndicator } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Trash2, Pencil, CircleX, Plus } from 'lucide-react-native';
 import { useThemeColors, BRISTOL_TYPES, FOOD_COMMENTS } from '../constants/config';
@@ -28,20 +28,17 @@ export default function LogSection({
   
   const [entryType, setEntryType] = useState('in');
 
-  // Food specific states
   const [foodText, setFoodText] = useState('');
   const [foodCalories, setFoodCalories] = useState(0);
   const [foodCommentChoice, setFoodCommentChoice] = useState(FOOD_COMMENTS[0]);
   const [customComment, setCustomComment] = useState('');
   const [showFoodCommentDropdown, setShowFoodCommentDropdown] = useState(false);
 
-  // Outing specific states
   const [lowerStool, setLowerStool] = useState(4);
   const [higherStool, setHigherStool] = useState(null);
   const [showLowerDropdown, setShowLowerDropdown] = useState(false);
   const [showHigherDropdown, setShowHigherDropdown] = useState(false);
 
-  // Editing states
   const [editingIndex, setEditingIndex] = useState(null);
   const [editTimeObject, setEditTimeObject] = useState(new Date());
   const [showEditPicker, setShowEditPicker] = useState(false);
@@ -56,6 +53,9 @@ export default function LogSection({
   const [showEditLowerDropdown, setShowEditLowerDropdown] = useState(false);
   const [showEditHigherDropdown, setShowEditHigherDropdown] = useState(false);
 
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [foodInputError, setFoodInputError] = useState(null);
+
   useEffect(() => {
     const isActive = showInputBox || editingIndex !== null;
     if (onActiveStateChange) {
@@ -63,13 +63,66 @@ export default function LogSection({
     }
   }, [showInputBox, editingIndex]);
 
+  const computeCaloriesWithAI = async (text, isEdit = false) => {
+    if (!text || text.trim() === '') {
+      isEdit ? setEditFoodCalories(0) : setFoodCalories(0);
+      setFoodInputError(null);
+      return;
+    }
+
+    setIsCalculating(true);
+    // State 1: Immediate feedback upon leaving the text box
+    setFoodInputError("Calculating...");
+
+    const controller = new AbortController();
+
+    // State 2 & 3: Progressive messaging at 5s and 10s
+    const timer5s = setTimeout(() => setFoodInputError("Thinking..."), 5000);
+    const timer10s = setTimeout(() => setFoodInputError("One more moment please..."), 10000);
+    
+    // State 4: Hard abort at 15 seconds
+    const timeoutId = setTimeout(() => controller.abort(), 15000); 
+
+    try {
+      const response = await fetch('/api/calories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ foodText: text }),
+        signal: controller.signal
+      });
+
+      const data = await response.json();
+
+      if (data.invalid || data.error) {
+        isEdit ? setEditFoodCalories(0) : setFoodCalories(0);
+        setFoodInputError("Invalid input, please enter a real food item.");
+      } else {
+        isEdit ? setEditFoodCalories(data.calories || 0) : setFoodCalories(data.calories || 0);
+        setFoodInputError(null); // Clear the status message on success
+      }
+    } catch (error) {
+      // The developer sees the technical details in the terminal
+      console.error("[Backend Log] API Fetch Error Details:", error.message || error);
+      
+      // The user sees the clean failure message
+      setFoodInputError("Calculation failed - please retry.");
+      isEdit ? setEditFoodCalories(0) : setFoodCalories(0);
+    } finally {
+      setIsCalculating(false);
+      // Crucial: Clear all pending timers the moment a response (or error) resolves
+      clearTimeout(timer5s);
+      clearTimeout(timer10s);
+      clearTimeout(timeoutId);
+    }
+  };
+
   useEffect(() => {
     const handleKeyboardHide = () => {
       if (showInputBox && entryType === 'in') {
-        setFoodCalories(computeCalories(foodText));
+        computeCaloriesWithAI(foodText, false);
       }
       if (editingIndex !== null && editEntryType === 'in') {
-        setEditFoodCalories(computeCalories(editFoodText));
+        computeCaloriesWithAI(editFoodText, true);
       }
     };
 
@@ -88,37 +141,6 @@ export default function LogSection({
 
   const formatTimeToString = (dateObj) => dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
-  // Realistic heuristic calorie estimation engine
-  const computeCalories = (text) => {
-    if (!text || text.trim() === '') return 0;
-    
-    const lower = text.toLowerCase();
-    
-    // Extract leading number if present (e.g., "50 chocolate cakes" -> multiplier = 50)
-    const matchQty = lower.match(/^(\d+)/);
-    const explicitQty = matchQty ? parseInt(matchQty[1], 10) : 1;
-
-    let baselinePerUnit = 150; // default average item baseline
-
-    if (lower.includes('cake') || lower.includes('brownie') || lower.includes('pastry')) {
-      baselinePerUnit = 400;
-    } else if (lower.includes('pizza') || lower.includes('burger') || lower.includes('pasta')) {
-      baselinePerUnit = 650;
-    } else if (lower.includes('salad') || lower.includes('apple') || lower.includes('fruit')) {
-      baselinePerUnit = 120;
-    } else if (lower.includes('egg') || lower.includes('toast') || lower.includes('coffee')) {
-      baselinePerUnit = 90;
-    } else if (lower.includes('rice') || lower.includes('chicken') || lower.includes('steak')) {
-      baselinePerUnit = 450;
-    }
-
-    // Word count scaling fallback if no explicit digit multiplier is at the start
-    const words = lower.split(/\s+/).filter(Boolean);
-    const scalingFactor = matchQty ? explicitQty : Math.max(1, words.length);
-
-    return baselinePerUnit * scalingFactor;
-  };
-
   const handleContainerPress = () => {
     if (foodInputRef.current) foodInputRef.current.blur();
     if (editFoodInputRef.current) editFoodInputRef.current.blur();
@@ -128,6 +150,7 @@ export default function LogSection({
   const resetFormState = () => {
     setFoodText('');
     setFoodCalories(0);
+    setFoodInputError(null);
     setFoodCommentChoice(FOOD_COMMENTS[0]);
     setCustomComment('');
     setLowerStool(4);
@@ -169,8 +192,8 @@ export default function LogSection({
     setShowEditLowerDropdown(false);
   };
 
-  const isAddDisabled = entryType === 'in' && (!foodText || foodText.trim() === '');
-  const isEditDisabled = editEntryType === 'in' && (!editFoodText || editFoodText.trim() === '');
+  const isAddDisabled = entryType === 'in' && (!foodText || foodText.trim() === '' || isCalculating || foodInputError !== null);
+  const isEditDisabled = editEntryType === 'in' && (!editFoodText || editFoodText.trim() === '' || isCalculating || foodInputError !== null);
 
   const handleAdd = () => {
     if (isAddDisabled) return;
@@ -181,7 +204,7 @@ export default function LogSection({
     if (entryType === 'in') {
       const commentFinal = foodCommentChoice === 'Other...' ? customComment : foodCommentChoice;
       payload.foodText = foodText;
-      payload.calories = computeCalories(foodText);
+      payload.calories = foodCalories;
       payload.comment = commentFinal;
     } else {
       payload.lowerStool = lowerStool;
@@ -202,7 +225,7 @@ export default function LogSection({
     if (editEntryType === 'in') {
       const commentFinal = editFoodComment === 'Other...' ? editCustomComment : editFoodComment;
       payload.foodText = editFoodText;
-      payload.calories = computeCalories(editFoodText);
+      payload.calories = editFoodCalories;
       payload.comment = commentFinal;
     } else {
       payload.lowerStool = editLowerStool;
@@ -226,6 +249,7 @@ export default function LogSection({
     if (item.type === 'in') {
       setEditFoodText(item.foodText || '');
       setEditFoodCalories(item.calories || 0);
+      setFoodInputError(null);
       if (FOOD_COMMENTS.includes(item.comment)) {
         setEditFoodComment(item.comment);
         setEditCustomComment('');
@@ -313,6 +337,7 @@ export default function LogSection({
     textInputBox: { borderWidth: 1, borderColor: themeColors.border, borderRadius: 6, padding: 10, backgroundColor: themeColors.inputBg, color: themeColors.title, fontSize: 14, height: 70, textAlignVertical: 'top', marginBottom: 10 },
     calculatedBox: { borderWidth: 1, borderColor: themeColors.border, borderRadius: 6, padding: 10, backgroundColor: themeColors.secondaryBtn, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     calculatedText: { fontSize: 13, color: themeColors.text, fontWeight: '600' },
+    errorText: { fontSize: 12, color: themeColors.danger, marginBottom: 10, fontWeight: '600' },
 
     dropdownTrigger: { borderWidth: 1, borderColor: themeColors.border, borderRadius: 6, padding: 10, backgroundColor: themeColors.inputBg, height: 40, justifyContent: 'center', marginBottom: 10 },
     dropdownTriggerText: { fontSize: 13, color: themeColors.text },
@@ -411,12 +436,23 @@ export default function LogSection({
                   placeholder="E.g., 2 eggs, 1 slice whole wheat bread, coffee"
                   placeholderTextColor={themeColors.muted}
                   value={foodText}
-                  onChangeText={setFoodText}
+                  onChangeText={(text) => {
+                    setFoodText(text);
+                    if (foodInputError) setFoodInputError(null);
+                  }}
                 />
+
+                {foodInputError && (
+                  <Text style={styles.errorText}>{foodInputError}</Text>
+                )}
 
                 <Text style={styles.miniLabel}>Estimated Calories:</Text>
                 <View style={styles.calculatedBox}>
-                  <Text style={styles.calculatedText}>🔥 {foodCalories} kcal</Text>
+                  {isCalculating ? (
+                    <ActivityIndicator size="small" color={themeColors.primary} />
+                  ) : (
+                    <Text style={styles.calculatedText}>🔥 {foodCalories} kcal</Text>
+                  )}
                 </View>
 
                 <Text style={styles.miniLabel}>Comment / Tag:</Text>
@@ -551,12 +587,23 @@ export default function LogSection({
                         multiline 
                         maxLength={255} 
                         value={editFoodText} 
-                        onChangeText={setEditFoodText} 
+                        onChangeText={(text) => {
+                          setEditFoodText(text);
+                          if (foodInputError) setFoodInputError(null);
+                        }} 
                       />
+
+                      {foodInputError && (
+                        <Text style={styles.errorText}>{foodInputError}</Text>
+                      )}
                       
                       <Text style={styles.miniLabel}>Estimated Calories:</Text>
                       <View style={styles.calculatedBox}>
-                        <Text style={styles.calculatedText}>🔥 {editFoodCalories} kcal</Text>
+                        {isCalculating ? (
+                          <ActivityIndicator size="small" color={themeColors.primary} />
+                        ) : (
+                          <Text style={styles.calculatedText}>🔥 {editFoodCalories} kcal</Text>
+                        )}
                       </View>
 
                       <Text style={styles.miniLabel}>Comment:</Text>
