@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     apiKey,
     defaultHeaders: {
       'HTTP-Referer': 'http://localhost:8081',
-      'X-Title': 'Gastro Tracker App',
+      'X-Title': 'InsideOut',
     }
   });
 

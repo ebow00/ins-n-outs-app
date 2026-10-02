@@ -1,61 +1,85 @@
 import { Image } from 'expo-image';
 import * as SplashScreen from 'expo-splash-screen';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
-import Animated, { Easing, Keyframe } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  Keyframe,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
 const DURATION = 600;
 
+// Splash sequence: blue fades in, holds, logo fades in, holds, then everything dissolves into the app.
+// SPLASH_BASE_COLOR must match the native splash backgroundColor in app.json so the handoff is seamless.
+const SPLASH_BASE_COLOR = '#FFFFFF';
+const SPLASH_BLUE = '#004FC6';
+const SPLASH_BLUE_FADE_IN = 800;
+const SPLASH_BLUE_HOLD = 2000;
+const SPLASH_LOGO_FADE_IN = 800;
+const SPLASH_LOGO_HOLD = 4000;
+const SPLASH_FADE_OUT = 700;
+
 export function AnimatedSplashOverlay() {
-  const [animate, setAnimate] = useState(false);
   const [visible, setVisible] = useState(true);
+  const started = useRef(false);
+  const blueOpacity = useSharedValue(0);
+  const logoOpacity = useSharedValue(0);
+  const logoScale = useSharedValue(0.92);
+  const overlayOpacity = useSharedValue(1);
+
+  const blueStyle = useAnimatedStyle(() => ({ opacity: blueOpacity.value }));
+  const logoStyle = useAnimatedStyle(() => ({
+    opacity: logoOpacity.value,
+    transform: [{ scale: logoScale.value }],
+  }));
+  const overlayStyle = useAnimatedStyle(() => ({ opacity: overlayOpacity.value }));
 
   if (!visible) return null;
 
-  const splashKeyframe = new Keyframe({
-    0: {
-      transform: [{ scale: 1 }],
-      opacity: 1,
-    },
-    20: {
-      opacity: 1,
-    },
-    70: {
-      opacity: 0,
-      easing: Easing.elastic(0.7),
-    },
-    100: {
-      opacity: 0,
-      transform: [{ scale: 1 }],
-      easing: Easing.elastic(0.7),
-    },
-  });
+  const start = () => {
+    if (started.current) return;
+    started.current = true;
+    SplashScreen.hideAsync().finally(() => {
+      const easing = Easing.out(Easing.cubic);
+      const logoDelay = SPLASH_BLUE_FADE_IN + SPLASH_BLUE_HOLD;
+      const dissolveDelay = logoDelay + SPLASH_LOGO_FADE_IN + SPLASH_LOGO_HOLD;
 
-  const image = <Image style={styles.image} source={require('@/assets/images/expo-logo.png')} />;
+      blueOpacity.set(withTiming(1, { duration: SPLASH_BLUE_FADE_IN, easing }));
+      logoOpacity.set(withDelay(logoDelay, withTiming(1, { duration: SPLASH_LOGO_FADE_IN, easing })));
+      logoScale.set(withDelay(logoDelay, withTiming(1, { duration: SPLASH_LOGO_FADE_IN, easing })));
+      overlayOpacity.set(
+        withDelay(
+          dissolveDelay,
+          withTiming(0, { duration: SPLASH_FADE_OUT, easing: Easing.inOut(Easing.quad) }, (finished) => {
+            'worklet';
+            if (finished) {
+              scheduleOnRN(setVisible, false);
+            }
+          })
+        )
+      );
+    });
+  };
 
-  return animate ? (
+  return (
+    // Composite the overlay as one layer so the icon square and background dissolve together
+    // (otherwise Android applies opacity to each child separately and the square shows through).
     <Animated.View
-      entering={splashKeyframe.duration(DURATION).withCallback((finished) => {
-        'worklet';
-        if (finished) {
-          scheduleOnRN(setVisible, false);
-        }
-      })}
-      style={styles.splashOverlay}>
-      {image}
+      onLayout={start}
+      needsOffscreenAlphaCompositing
+      renderToHardwareTextureAndroid
+      style={[styles.splashOverlay, overlayStyle]}>
+      <Animated.View style={[styles.splashBlue, blueStyle]} />
+      <Animated.View style={logoStyle}>
+        <Image style={styles.splashImage} source={require('@/assets/images/insideOut_image_icon.png')} />
+      </Animated.View>
     </Animated.View>
-  ) : (
-    <View
-      onLayout={() => {
-        SplashScreen.hideAsync().finally(() => {
-          setAnimate(true);
-        });
-      }}
-      style={styles.splashOverlay}>
-      {image}
-    </View>
   );
 }
 
@@ -138,9 +162,17 @@ const styles = StyleSheet.create({
     height: 128,
     position: 'absolute',
   },
+  splashImage: {
+    width: 220,
+    height: 220,
+  },
+  splashBlue: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: SPLASH_BLUE,
+  },
   splashOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: '#208AEF',
+    backgroundColor: SPLASH_BASE_COLOR,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,

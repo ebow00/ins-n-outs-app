@@ -21,9 +21,12 @@ export default function LogItemCard({ item, onEdit, onDelete }) {
   const styles = StyleSheet.create({
     historyItemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, padding: 12, borderRadius: 8, marginVertical: 4 },
     rowMeta: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    itemIcon: { width: 22, height: 22, marginRight: 10, resizeMode: 'contain' },
-    historyText: { fontSize: 13, color: themeColors.text, flex: 1 },
-    boldText: { fontWeight: 'bold', color: themeColors.title },
+    itemIconBadge: { width: 34, height: 34, borderRadius: 8, borderWidth: 1.5, borderColor: themeColors.title, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+    itemIcon: { width: 24, height: 24, resizeMode: 'contain' },
+    timeText: { fontSize: 13, fontWeight: 'bold', color: themeColors.title, marginRight: 8 },
+    contentColumn: { flex: 1 },
+    historyText: { fontSize: 13, color: themeColors.text },
+    detailText: { fontSize: 12, color: themeColors.muted, marginTop: 2 },
     actionButtonContainer: { flexDirection: 'row', alignItems: 'center' },
     actionRowIconBtn: { padding: 8, marginLeft: 4 }
   });
@@ -34,14 +37,21 @@ export default function LogItemCard({ item, onEdit, onDelete }) {
       onPress={onEdit}
     >
       <View style={styles.rowMeta}>
-        <Image source={cardIcon} style={[styles.itemIcon, { tintColor: themeColors.title }]} />
-        <Text style={styles.historyText}>
-          <Text style={styles.boldText}>{item.timestamp}</Text> 
-          {isFood 
-            ? ` — 🍔 "${item.foodText}" (${item.calories || 0} kcal) [${item.comment}]` 
-            : ` — 🚽 ${renderStoolEntryText()}`
-          }
-        </Text>
+        <View style={styles.itemIconBadge}>
+          <Image source={cardIcon} style={[styles.itemIcon, { tintColor: themeColors.title }]} />
+        </View>
+        {/* Separate Text so the time stays on the left even when the entry is in Hebrew */}
+        <Text style={styles.timeText}>{item.timestamp}</Text>
+        <View style={styles.contentColumn}>
+          {isFood ? (
+            <>
+              <Text style={styles.historyText} numberOfLines={1} ellipsizeMode="tail">{item.foodText}</Text>
+              <Text style={styles.detailText} numberOfLines={1}>{item.calories || 0} kcal · {item.comment}</Text>
+            </>
+          ) : (
+            <Text style={styles.historyText}>{renderStoolEntryText()}</Text>
+          )}
+        </View>
       </View>
       
       <View style={styles.actionButtonContainer}>

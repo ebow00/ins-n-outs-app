@@ -1,12 +1,14 @@
 import React, { useState, useRef } from 'react';
-import { View, ScrollView, Text, TouchableWithoutFeedback, StyleSheet, ActivityIndicator, Keyboard } from 'react-native';
+import { View, ScrollView, TouchableWithoutFeedback, StyleSheet, ActivityIndicator, Keyboard } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeColors } from '../constants/config';
 import { useGastroData } from '../hooks/useGastroData';
 import { toLocalDateString } from '../utils/date';
 import CalendarSection from '../components/CalendarSection';
 import WeightSection from '../components/WeightSection';
 import LogSection from '../components/LogSection';
-import StatsSection from '../components/StatsSection';
+import SummarySection from '../components/SummarySection';
+import AppHeader from '../components/AppHeader';
 
 export default function App() {
   const themeColors = useThemeColors();
@@ -21,6 +23,8 @@ export default function App() {
     isLoaded,
     diaryData, 
     weightData, 
+    periodStarts,
+    togglePeriodStart,
     commitWeight, 
     addLogEntry, 
     editLogEntry, 
@@ -62,8 +66,7 @@ export default function App() {
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: themeColors.background },
     loadingContainer: { flex: 1, backgroundColor: themeColors.background, justifyContent: 'center', alignItems: 'center' },
-    scrollContent: { paddingTop: 40, paddingHorizontal: 16 },
-    title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginVertical: 14, color: themeColors.title },
+    scrollContent: { paddingTop: 16, paddingHorizontal: 16 },
     scrollFooterSpacer: { height: 60 }
   });
 
@@ -82,7 +85,8 @@ export default function App() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <AppHeader title="InsideOut Dashboard" onMenuPress={() => {}} />
       <ScrollView 
         ref={scrollViewRef}
         style={{ flex: 1 }} 
@@ -91,12 +95,11 @@ export default function App() {
       >
         <TouchableWithoutFeedback onPress={handleBackgroundPress}>
           <View style={{ flexGrow: 1 }}>
-            
-            <Text style={styles.title}>Gastro Tracker Dashboard</Text>
-            
             <CalendarSection 
               selectedDate={selectedDate} 
               onDateChange={handleDateChange} 
+              periodStarts={periodStarts}
+              onTogglePeriodStart={togglePeriodStart}
             />
 
             <WeightSection 
@@ -119,16 +122,17 @@ export default function App() {
               />
             </View>
 
-            <StatsSection 
+            <SummarySection 
               selectedDate={selectedDate} 
               diaryData={diaryData} 
               weightData={weightData} 
+              periodStarts={periodStarts}
             />
             
             <View style={styles.scrollFooterSpacer} />
           </View>
         </TouchableWithoutFeedback>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }

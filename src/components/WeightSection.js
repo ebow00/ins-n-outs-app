@@ -34,7 +34,7 @@ export default function WeightSection({ selectedDate, weightData, commitWeight }
 
   const styles = StyleSheet.create({
     weightContainerBox: { backgroundColor: themeColors.card, padding: 14, borderRadius: 12, marginVertical: 6, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    weightBoxTitle: { fontSize: 16, fontWeight: 'bold', color: themeColors.text },
+    weightBoxTitle: { fontSize: 19, fontWeight: 'bold', color: themeColors.title },
     weightInlineInputRow: { flexDirection: 'row', alignItems: 'center' },
     weightTextInputField: { borderWidth: 1, borderColor: themeColors.border, borderRadius: 6, width: 80, height: 36, textAlign: 'center', fontSize: 16, fontWeight: '600', color: themeColors.title, backgroundColor: themeColors.inputBg, padding: 4 },
     weightUnitLabelText: { fontSize: 15, fontWeight: '600', color: themeColors.muted, marginLeft: 8 }

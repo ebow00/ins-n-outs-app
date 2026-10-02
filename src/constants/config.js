@@ -38,8 +38,11 @@ export const Colors = {
     emptyText: '#94a3b8',
     foodBackground: '#dcfce7', // light-to-medium green
     foodBorder: '#86efac',
-    outingBackground: '#fef3c7', // light brown / warm amber tint
-    outingBorder: '#fde68a'
+    outingBackground: '#dcc5ad', // medium brown
+    outingBorder: '#a47551',
+    popupBackground: '#e2e8f0', // a step darker than the page so popups stand out
+    popupBorder: '#94a3b8',
+    popupPressed: '#cbd5e1'
   },
   dark: {
     background: '#0f172a',
@@ -59,8 +62,11 @@ export const Colors = {
     emptyText: '#64748b',
     foodBackground: '#064e3b', // deep rich green for dark mode
     foodBorder: '#065f46',
-    outingBackground: '#451a03', // deep warm brown for dark mode
-    outingBorder: '#78350f'
+    outingBackground: '#2f1702', // darker brown for dark mode
+    outingBorder: '#5c3a1e',
+    popupBackground: '#334155', // a step lighter than cards so popups stand out
+    popupBorder: '#64748b',
+    popupPressed: '#475569'
   }
 };
 

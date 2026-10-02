@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Plus } from 'lucide-react-native';
 import { useThemeColors } from '../constants/config';
 import LogEntryForm from './LogEntryForm';
 import LogItemCard from './LogItemCard';
+import { ThemedAlert } from './ThemedAlert';
 
 export default function LogSection({
   selectedDate,
@@ -37,7 +38,7 @@ export default function LogSection({
 
   const triggerEditMode = (id) => {
     if (showInputBox && hasUnsavedNewEntry) {
-      Alert.alert(
+      ThemedAlert.alert(
         "Changes made — keep editing or discard",
         "You have unsaved changes in your new entry.",
         [
@@ -80,7 +81,7 @@ export default function LogSection({
   const styles = StyleSheet.create({
     historyContainer: { backgroundColor: themeColors.card, padding: 16, borderRadius: 12, marginVertical: 10, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
     sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-    sectionTitle: { fontSize: 17, fontWeight: 'bold', color: themeColors.title },
+    sectionTitle: { fontSize: 19, fontWeight: 'bold', color: themeColors.title },
     addEntrySquareBtn: { backgroundColor: themeColors.primary, width: 42, height: 42, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
     emptyText: { color: themeColors.emptyText, fontStyle: 'italic', textAlign: 'center', marginVertical: 10 }
   });
