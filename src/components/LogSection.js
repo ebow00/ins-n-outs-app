@@ -5,68 +5,76 @@ import { useThemeColors } from '../constants/config';
 import LogEntryForm from './LogEntryForm';
 import LogItemCard from './LogItemCard';
 
-export default function LogSection({ 
-  selectedDate, 
-  diaryData, 
-  addLogEntry, 
-  editLogEntry, 
-  deleteLogEntry, 
-  backgroundPressCount, 
-  onOpenNewEntry, 
+export default function LogSection({
+  selectedDate,
+  diaryData,
+  addLogEntry,
+  editLogEntry,
+  deleteLogEntry,
+  backgroundPressCount,
+  onOpenNewEntry,
   onScrollToItem,
-  onActiveStateChange 
+  onActiveStateChange
 }) {
   const themeColors = useThemeColors();
   const itemRefs = useRef({});
 
   const [showInputBox, setShowInputBox] = useState(false);
-  const [editingIndex, setEditingIndex] = useState(null);
+  const [editingId, setEditingId] = useState(null);
   const [hasUnsavedNewEntry, setHasUnsavedNewEntry] = useState(false);
 
+  // A tap on the background closes the edit form (handled during render, not in an effect)
+  const [seenPressCount, setSeenPressCount] = useState(backgroundPressCount);
+  if (seenPressCount !== backgroundPressCount) {
+    setSeenPressCount(backgroundPressCount);
+    setEditingId(null);
+  }
+
   useEffect(() => {
-    const isActive = showInputBox || editingIndex !== null;
+    const isActive = showInputBox || editingId !== null;
     if (onActiveStateChange) onActiveStateChange(isActive);
-  }, [showInputBox, editingIndex]);
+  }, [showInputBox, editingId, onActiveStateChange]);
 
-  useEffect(() => {
-    if (backgroundPressCount > 0 && editingIndex !== null) {
-      setEditingIndex(null);
-    }
-  }, [backgroundPressCount]);
-
-  const triggerEditMode = (index) => {
+  const triggerEditMode = (id) => {
     if (showInputBox && hasUnsavedNewEntry) {
       Alert.alert(
         "Changes made — keep editing or discard",
         "You have unsaved changes in your new entry.",
         [
           { text: "Keep Editing", style: "cancel" },
-          { 
-            text: "Discard", 
-            style: "destructive", 
+          {
+            text: "Discard",
+            style: "destructive",
             onPress: () => {
               setShowInputBox(false);
               setHasUnsavedNewEntry(false);
-              setEditingIndex(index);
-              scrollToItem(index);
-            } 
+              setEditingId(id);
+              scrollToItem(id);
+            }
           }
         ]
       );
       return;
     }
-    
+
     setShowInputBox(false);
-    setEditingIndex(index);
-    scrollToItem(index);
+    setEditingId(id);
+    scrollToItem(id);
   };
 
-  const scrollToItem = (index) => {
+  const scrollToItem = (id) => {
     setTimeout(() => {
-      if (itemRefs.current[index] && onScrollToItem) {
-        onScrollToItem(itemRefs.current[index]);
+      if (itemRefs.current[id] && onScrollToItem) {
+        onScrollToItem(itemRefs.current[id]);
       }
     }, 50);
+  };
+
+  const handleDelete = (id) => {
+    deleteLogEntry(selectedDate, id, (deletedId) => {
+      delete itemRefs.current[deletedId];
+      setEditingId((current) => (current === deletedId ? null : current));
+    });
   };
 
   const styles = StyleSheet.create({
@@ -82,11 +90,11 @@ export default function LogSection({
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitle}>Daily Log</Text>
         {!showInputBox && (
-          <TouchableOpacity 
-            style={styles.addEntrySquareBtn} 
-            onPress={() => { 
-              setEditingIndex(null);
-              setShowInputBox(true); 
+          <TouchableOpacity
+            style={styles.addEntrySquareBtn}
+            onPress={() => {
+              setEditingId(null);
+              setShowInputBox(true);
               if (onOpenNewEntry) onOpenNewEntry();
             }}
           >
@@ -96,7 +104,7 @@ export default function LogSection({
       </View>
 
       {showInputBox && (
-        <LogEntryForm 
+        <LogEntryForm
           mode="add"
           selectedDate={selectedDate}
           onFormDirtyChange={setHasUnsavedNewEntry}
@@ -112,25 +120,25 @@ export default function LogSection({
         />
       )}
 
-      {diaryData[selectedDate]?.map((item, index) => (
-        <View key={index} ref={(el) => (itemRefs.current[index] = el)} collapsable={false}>
-          {editingIndex === index ? (
-            <LogEntryForm 
+      {diaryData[selectedDate]?.map((item) => (
+        <View key={item.id} ref={(el) => (itemRefs.current[item.id] = el)} collapsable={false}>
+          {editingId === item.id ? (
+            <LogEntryForm
               mode="edit"
               initialData={item}
               selectedDate={selectedDate}
               onSubmit={(payload) => {
-                editLogEntry(selectedDate, index, payload);
-                setEditingIndex(null);
+                editLogEntry(selectedDate, item.id, payload);
+                setEditingId(null);
               }}
-              onCancel={() => setEditingIndex(null)}
-              onDelete={() => deleteLogEntry(selectedDate, index)}
+              onCancel={() => setEditingId(null)}
+              onDelete={() => handleDelete(item.id)}
             />
           ) : (
-            <LogItemCard 
-              item={item} 
-              onEdit={() => triggerEditMode(index)} 
-              onDelete={() => deleteLogEntry(selectedDate, index)} 
+            <LogItemCard
+              item={item}
+              onEdit={() => triggerEditMode(item.id)}
+              onDelete={() => handleDelete(item.id)}
             />
           )}
         </View>

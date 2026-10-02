@@ -1,20 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableWithoutFeedback, StyleSheet } from 'react-native';
 import { useThemeColors } from '../constants/config';
 
-export default function WeightSection({ selectedDate, weightData, commitWeight, backgroundPressCount }) {
+export default function WeightSection({ selectedDate, weightData, commitWeight }) {
   const themeColors = useThemeColors();
-  const [currentWeightInput, setCurrentWeightInput] = useState('');
+  const storedWeight = weightData[selectedDate] || '';
+  const [currentWeightInput, setCurrentWeightInput] = useState(storedWeight);
 
-  useEffect(() => {
-    setCurrentWeightInput(weightData[selectedDate] || '');
-  }, [selectedDate, weightData]);
-
-  useEffect(() => {
-    if (backgroundPressCount > 0) {
-      commitWeight(selectedDate, currentWeightInput);
-    }
-  }, [backgroundPressCount]);
+  // Reset the input when the day or its saved value changes (done during render, not in an effect)
+  const syncKey = `${selectedDate}|${storedWeight}`;
+  const [syncedKey, setSyncedKey] = useState(syncKey);
+  if (syncedKey !== syncKey) {
+    setSyncedKey(syncKey);
+    setCurrentWeightInput(storedWeight);
+  }
 
   const saveWeightText = (text) => {
     let cleaned = text.replace(/[^0-9.]/g, '');

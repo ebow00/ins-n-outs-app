@@ -4,6 +4,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Trash2 } from 'lucide-react-native';
 import { useThemeColors, BRISTOL_TYPES, FOOD_COMMENTS } from '../constants/config';
 import { useAICalories } from '../hooks/useAICalories';
+import { formatHHMM } from '../utils/date';
 
 export default function LogEntryForm({ 
   mode = 'add', 
@@ -15,7 +16,7 @@ export default function LogEntryForm({
   onFormDirtyChange 
 }) {
   const themeColors = useThemeColors();
-  const { computeCalories, isCalculating, foodInputError, setFoodInputError } = useAICalories();
+  const { computeCalories, isCalculating, statusMessage, error, clearError } = useAICalories();
   const bristolNumbersArray = Array.from({ length: 7 }, (_, i) => i + 1);
   const inputRef = useRef(null);
 
@@ -33,6 +34,10 @@ export default function LogEntryForm({
   
   const [foodText, setFoodText] = useState(initialData?.foodText || '');
   const [foodCalories, setFoodCalories] = useState(initialData?.calories || 0);
+  const [foodIngredients, setFoodIngredients] = useState(initialData?.ingredients || []);
+  // The food text the current calories were calculated for
+  const [caloriesFor, setCaloriesFor] = useState(initialData?.foodText || '');
+  const caloriesAreStale = foodText.trim() !== caloriesFor.trim();
   
   const initialComment = initialData?.comment 
     ? (FOOD_COMMENTS.includes(initialData.comment) ? initialData.comment : 'Other...')
@@ -52,18 +57,22 @@ export default function LogEntryForm({
 
   useEffect(() => {
     if (onFormDirtyChange) onFormDirtyChange(hasContent);
-  }, [hasContent]);
+  }, [hasContent, onFormDirtyChange]);
 
-  useEffect(() => {
-    const handleKeyboardHide = async () => {
-      if (entryType === 'in') {
-        const result = await computeCalories(foodText);
-        setFoodCalories(result.isValid ? result.calories : 0);
-      }
-    };
-    const subscription = Keyboard.addListener('keyboardDidHide', handleKeyboardHide);
-    return () => subscription.remove();
-  }, [entryType, foodText]);
+  const handleManualCalculate = async () => {
+    handleContainerPress();
+    const textAtRequest = foodText;
+    const result = await computeCalories(textAtRequest);
+    if (result.isValid) {
+      setFoodCalories(result.calories);
+      setFoodIngredients(result.ingredients);
+      setCaloriesFor(textAtRequest);
+    } else {
+      setFoodCalories(0);
+      setFoodIngredients([]);
+      setCaloriesFor('');
+    }
+  };
 
   const handleContainerPress = () => {
     if (inputRef.current) inputRef.current.blur();
@@ -85,18 +94,19 @@ export default function LogEntryForm({
     setShowLowerDropdown(false);
   };
 
-  const isDisabled = entryType === 'in' && (!foodText.trim() || isCalculating || foodInputError !== null);
+  const isDisabled = entryType === 'in' && (!foodText.trim() || isCalculating || caloriesAreStale);
 
   const handleSave = () => {
     if (isDisabled) return;
     handleContainerPress();
     
-    const timestamp = timeObject.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    const timestamp = formatHHMM(timeObject);
     const payload = { timestamp, type: entryType };
 
     if (entryType === 'in') {
       payload.foodText = foodText;
       payload.calories = foodCalories;
+      payload.ingredients = foodIngredients;
       payload.comment = commentChoice === 'Other...' ? customComment : commentChoice;
     } else {
       payload.lowerStool = lowerStool;
@@ -112,18 +122,22 @@ export default function LogEntryForm({
     miniLabel: { fontSize: 11, color: themeColors.muted, marginBottom: 2, fontWeight: '600' },
     topHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12 },
     timeBoxWrapper: { alignSelf: 'flex-start' },
-    textInputSelector: { borderWidth: 1, borderColor: themeColors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#FFFFFF', height: 40, justifyContent: 'center' },
+    textInputSelector: { borderWidth: 1, borderColor: themeColors.border, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: themeColors.card, height: 40, justifyContent: 'center' },
     selectorTimeText: { fontSize: 14, color: themeColors.title, fontWeight: '500' },
     switchRowInline: { flexDirection: 'row', gap: 8 },
     switchButton: { width: 40, height: 40, borderRadius: 10, borderWidth: 1, borderColor: themeColors.border, justifyContent: 'center', alignItems: 'center', backgroundColor: themeColors.secondaryBtn },
     foodSwitchActive: { backgroundColor: themeColors.foodBackground, borderColor: themeColors.foodBorder },
     outingSwitchActive: { backgroundColor: themeColors.outingBackground, borderColor: themeColors.outingBorder },
     switchIcon: { width: 20, height: 20, resizeMode: 'contain' },
-    textInputBox: { borderWidth: 1, borderColor: themeColors.border, borderRadius: 6, padding: 10, backgroundColor: '#FFFFFF', color: themeColors.title, fontSize: 14, height: 70, textAlignVertical: 'top', marginBottom: 10 },
+    textInputBox: { borderWidth: 1, borderColor: themeColors.border, borderRadius: 6, padding: 10, backgroundColor: themeColors.card, color: themeColors.title, fontSize: 14, height: 70, textAlignVertical: 'top', marginBottom: 8 },
+    calculateTriggerBtn: { backgroundColor: themeColors.primary, height: 40, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+    calculateTriggerText: { color: '#ffffff', fontWeight: 'bold', fontSize: 14 },
     calculatedBox: { borderWidth: 1, borderColor: themeColors.border, borderRadius: 6, padding: 10, backgroundColor: themeColors.secondaryBtn, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     calculatedText: { fontSize: 13, color: themeColors.text, fontWeight: '600' },
+    staleText: { fontSize: 13, color: themeColors.muted, fontStyle: 'italic' },
+    statusText: { fontSize: 12, color: themeColors.muted, marginBottom: 10, fontWeight: '600' },
     errorText: { fontSize: 12, color: themeColors.danger, marginBottom: 10, fontWeight: '600' },
-    dropdownTrigger: { borderWidth: 1, borderColor: themeColors.border, borderRadius: 6, padding: 10, backgroundColor: '#FFFFFF', height: 40, justifyContent: 'center', marginBottom: 10 },
+    dropdownTrigger: { borderWidth: 1, borderColor: themeColors.border, borderRadius: 6, padding: 10, backgroundColor: themeColors.card, height: 40, justifyContent: 'center', marginBottom: 10 },
     dropdownTriggerText: { fontSize: 13, color: themeColors.text },
     dropdownMenu: { borderWidth: 1, borderColor: themeColors.border, borderRadius: 6, backgroundColor: themeColors.card, marginBottom: 10 },
     dropdownOption: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: themeColors.dropdownOptionBorder, paddingHorizontal: 6 },
@@ -147,7 +161,7 @@ export default function LogEntryForm({
           <View style={styles.timeBoxWrapper}>
             <Text style={styles.miniLabel}>Time:</Text>
             <TouchableOpacity style={styles.textInputSelector} onPress={() => setShowPicker(true)}>
-              <Text style={styles.selectorTimeText}>{timeObject.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
+              <Text style={styles.selectorTimeText}>{formatHHMM(timeObject)}</Text>
             </TouchableOpacity>
             {showPicker && (
               <DateTimePicker value={timeObject} mode="time" is24Hour={true} display={Platform.OS === 'ios' ? 'spinner' : 'default'} onValueChange={(_, date) => { if (date) setTimeObject(date); if (Platform.OS === 'android') setShowPicker(false); }} onDismiss={() => setShowPicker(false)} />
@@ -170,12 +184,32 @@ export default function LogEntryForm({
         {entryType === 'in' ? (
           <>
             <Text style={styles.miniLabel}>Describe what you ate:</Text>
-            <TextInput ref={inputRef} style={styles.textInputBox} multiline maxLength={255} value={foodText} placeholder="E.g., 2 eggs, 1 slice whole wheat bread..." placeholderTextColor={themeColors.muted} onChangeText={(text) => { setFoodText(text); if (foodInputError) setFoodInputError(null); }} />
-            {foodInputError && <Text style={styles.errorText}>{foodInputError}</Text>}
+            <TextInput ref={inputRef} style={styles.textInputBox} multiline maxLength={255} value={foodText} placeholder="E.g., 2 eggs, 1 slice whole wheat bread..." placeholderTextColor={themeColors.muted} onChangeText={(text) => { setFoodText(text); if (error) clearError(); }} />
+            
+            <TouchableOpacity 
+              style={[styles.calculateTriggerBtn, (!foodText.trim() || isCalculating) && styles.disabledActionBtn]} 
+              onPress={handleManualCalculate}
+              disabled={!foodText.trim() || isCalculating}
+            >
+              {isCalculating ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={styles.calculateTriggerText}>Calculate Calories</Text>
+              )}
+            </TouchableOpacity>
+
+            {statusMessage && <Text style={styles.statusText}>{statusMessage}</Text>}
+            {error && <Text style={styles.errorText}>{error}</Text>}
 
             <Text style={styles.miniLabel}>Estimated Calories:</Text>
             <View style={styles.calculatedBox}>
-              {isCalculating ? <ActivityIndicator size="small" color={themeColors.primary} /> : <Text style={styles.calculatedText}>🔥 {foodCalories} kcal</Text>}
+              {isCalculating ? (
+                <ActivityIndicator size="small" color={themeColors.primary} />
+              ) : caloriesAreStale ? (
+                <Text style={styles.staleText}>Press &quot;Calculate Calories&quot; to update</Text>
+              ) : (
+                <Text style={styles.calculatedText}>🔥 {foodCalories} kcal</Text>
+              )}
             </View>
 
             <Text style={styles.miniLabel}>Comment / Tag:</Text>
