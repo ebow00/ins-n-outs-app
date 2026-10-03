@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 
+import { requestCalories } from '../utils/caloriesApi';
+import { logInternal } from '../utils/internalLog';
+
 const TIMEOUT_MS = 30000;
 
 // Space out the loading messages
@@ -10,6 +13,9 @@ const LOADING_MESSAGES = [
 ];
 
 const FAILED_RESULT = { calories: 0, ingredients: [], isValid: false };
+
+const GENERIC_ERROR = "Something went wrong, please try again";
+const CONNECTION_ERROR = "Can't reach out, please check your connection and try again";
 
 export function useAICalories() {
   const [isCalculating, setIsCalculating] = useState(false);
@@ -42,28 +48,22 @@ export function useAICalories() {
 
     const controller = new AbortController();
     controllerRef.current = controller;
-    let timedOut = false;
+    timersRef.current = LOADING_MESSAGES.map(([delay, message]) => setTimeout(() => setStatusMessage(message), delay));
 
-    timersRef.current = [
-      ...LOADING_MESSAGES.map(([delay, message]) => setTimeout(() => setStatusMessage(message), delay)),
-      setTimeout(() => { timedOut = true; controller.abort(); }, TIMEOUT_MS)
-    ];
-
+    const startedAt = Date.now();
     try {
-      const response = await fetch('/api/calories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ foodText: text }),
-        signal: controller.signal
-      });
+      const result = await requestCalories(text, { timeoutMs: TIMEOUT_MS, signal: controller.signal });
 
-      const data = await response.json().catch(() => ({}));
+      // Aborted because the form closed: nothing to report
+      if (result.kind === 'aborted') return FAILED_RESULT;
 
-      if (!response.ok || data.error) {
-        setError(data.error ? `Calculation failed: ${data.error}` : "Calculation failed - please retry.");
+      if (result.kind !== 'ok') {
+        logInternal(`calories_${result.kind}`, { durationMs: Date.now() - startedAt, status: result.status, message: result.message });
+        setError(result.kind === 'network' ? CONNECTION_ERROR : GENERIC_ERROR);
         return FAILED_RESULT;
       }
 
+      const { data } = result;
       if (data.invalid) {
         setError("Invalid input, please enter a real food item.");
         return FAILED_RESULT;
@@ -79,15 +79,6 @@ export function useAICalories() {
         ingredients: ingredientsList,
         isValid: true
       };
-    } catch (err) {
-      // Aborted because the form closed, not because of a timeout: nothing to report
-      if (err.name === 'AbortError' && !timedOut) return FAILED_RESULT;
-
-      console.error("[Backend Log] API Fetch Error Details:", err.message || err);
-      setError(timedOut
-        ? "Took too long - please try again."
-        : "Couldn't reach the server - check your connection and retry.");
-      return FAILED_RESULT;
     } finally {
       clearTimers();
       controllerRef.current = null;

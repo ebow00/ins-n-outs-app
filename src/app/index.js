@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { View, ScrollView, TouchableWithoutFeedback, StyleSheet, ActivityIndicator, Keyboard } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, ScrollView, TouchableWithoutFeedback, StyleSheet, ActivityIndicator, Keyboard, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeColors } from '../constants/config';
 import { useGastroData } from '../hooks/useGastroData';
@@ -18,6 +18,26 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(() => toLocalDateString());
   const [backgroundPressCount, setBackgroundPressCount] = useState(0);
   const [isLogActive, setIsLogActive] = useState(false); // Track if a log is open/editing
+
+  // Android leaves an input focused (blinking cursor, and the weight unsaved since it saves on blur)
+  // when the keyboard is closed with the back gesture or a tap on a card that handles its own taps.
+  // Once the keyboard is really gone, blur whatever input still has focus.
+  useEffect(() => {
+    let timer = null;
+    const sub = Keyboard.addListener('keyboardDidHide', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        // Keyboard came straight back: focus just moved to another input
+        if (Keyboard.isVisible()) return;
+        const focused = TextInput.State.currentlyFocusedInput();
+        if (focused) TextInput.State.blurTextInput(focused);
+      }, 150);
+    });
+    return () => {
+      clearTimeout(timer);
+      sub.remove();
+    };
+  }, []);
 
   const { 
     isLoaded,
@@ -86,7 +106,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <AppHeader title="InsideOut Dashboard" onMenuPress={() => {}} />
+      <AppHeader title="In's n Out's Dashboard" onMenuPress={() => {}} />
       <ScrollView 
         ref={scrollViewRef}
         style={{ flex: 1 }} 

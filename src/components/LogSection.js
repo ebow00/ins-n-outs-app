@@ -109,6 +109,7 @@ export default function LogSection({
           mode="add"
           selectedDate={selectedDate}
           onFormDirtyChange={setHasUnsavedNewEntry}
+          onScrollIntoView={onScrollToItem}
           onSubmit={(payload) => {
             addLogEntry(selectedDate, payload);
             setShowInputBox(false);
@@ -128,6 +129,7 @@ export default function LogSection({
               mode="edit"
               initialData={item}
               selectedDate={selectedDate}
+              onScrollIntoView={onScrollToItem}
               onSubmit={(payload) => {
                 editLogEntry(selectedDate, item.id, payload);
                 setEditingId(null);

@@ -6,6 +6,17 @@ import { useThemeColors, BRISTOL_TYPES, FOOD_COMMENTS } from '../constants/confi
 import { useAICalories } from '../hooks/useAICalories';
 import { formatHHMM } from '../utils/date';
 
+function scrollFoodIntoView(labelRef, onScrollIntoView) {
+  if (!onScrollIntoView) return;
+  const scroll = () => {
+    if (labelRef.current) onScrollIntoView(labelRef.current);
+  };
+  scroll();
+  // Android scrolls the focused input back down to the edge once the screen settles
+  // around the keyboard, undoing the first scroll, so repeat it after that
+  setTimeout(scroll, 350);
+}
+
 export default function LogEntryForm({ 
   mode = 'add', 
   initialData = null, 
@@ -13,12 +24,30 @@ export default function LogEntryForm({
   onSubmit, 
   onCancel, 
   onDelete,
-  onFormDirtyChange 
+  onFormDirtyChange,
+  onScrollIntoView
 }) {
   const themeColors = useThemeColors();
   const { computeCalories, isCalculating, statusMessage, error, clearError } = useAICalories();
   const bristolNumbersArray = Array.from({ length: 7 }, (_, i) => i + 1);
   const inputRef = useRef(null);
+  const foodLabelRef = useRef(null);
+  const foodInputFocusedRef = useRef(false);
+
+  // On Android the tab bar rides up above the keyboard and covers whatever sits just
+  // above it, so lift the food input and Calculate button to the top of the screen
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      if (foodInputFocusedRef.current) scrollFoodIntoView(foodLabelRef, onScrollIntoView);
+    });
+    return () => sub.remove();
+  }, [onScrollIntoView]);
+
+  const handleFoodInputFocus = () => {
+    foodInputFocusedRef.current = true;
+    // Keyboard already open (e.g. coming from the comment field): no keyboardDidShow will fire
+    if (Keyboard.isVisible()) scrollFoodIntoView(foodLabelRef, onScrollIntoView);
+  };
 
   const parseInitialTime = (timestamp) => {
     if (!timestamp) return new Date();
@@ -183,8 +212,8 @@ export default function LogEntryForm({
 
         {entryType === 'in' ? (
           <>
-            <Text style={styles.miniLabel}>Describe what you ate:</Text>
-            <TextInput ref={inputRef} style={styles.textInputBox} multiline maxLength={255} value={foodText} placeholder="E.g., 2 eggs, 1 slice whole wheat bread..." placeholderTextColor={themeColors.muted} onChangeText={(text) => { setFoodText(text); if (error) clearError(); }} />
+            <Text ref={foodLabelRef} style={styles.miniLabel}>Describe what you ate:</Text>
+            <TextInput ref={inputRef} style={styles.textInputBox} multiline maxLength={255} value={foodText} placeholder="E.g., 2 eggs, 1 slice whole wheat bread..." placeholderTextColor={themeColors.muted} onChangeText={(text) => { setFoodText(text); if (error) clearError(); }} onFocus={handleFoodInputFocus} onBlur={() => { foodInputFocusedRef.current = false; }} />
             
             <TouchableOpacity 
               style={[styles.calculateTriggerBtn, (!foodText.trim() || isCalculating) && styles.disabledActionBtn]} 

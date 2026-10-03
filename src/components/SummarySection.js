@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, TouchableWithoutFeedback, StyleSheet } fr
 import { Plus, Minus, Flame } from 'lucide-react-native';
 import { BathroomScaleIcon, PeriodCalendarIcon } from './StatIcons';
 import { useThemeColors } from '../constants/config';
-import { toLocalDateString, daysInclusive } from '../utils/date';
+import { daysInclusive } from '../utils/date';
 
 export default function SummarySection({ selectedDate, diaryData, weightData, periodStarts = [] }) {
   const themeColors = useThemeColors();
@@ -42,10 +42,10 @@ export default function SummarySection({ selectedDate, diaryData, weightData, pe
   const weight = weightData[selectedDate];
   const hasWeight = !!weight && parseFloat(weight) > 0;
 
-  // Counts back from today to the most recent marked first day (future marks are ignored)
-  const today = toLocalDateString();
-  const latestStart = periodStarts.filter((d) => d <= today).at(-1);
-  const periodDays = latestStart ? daysInclusive(latestStart, today) : null;
+  // Counts back from the selected day to the most recent first day on or before it,
+  // so each day keeps its own count (marks after the selected day are ignored)
+  const latestStart = periodStarts.filter((d) => d <= selectedDate).at(-1);
+  const periodDays = latestStart ? daysInclusive(latestStart, selectedDate) : null;
 
   return (
     <TouchableWithoutFeedback onPress={(e) => e?.stopPropagation?.()}>

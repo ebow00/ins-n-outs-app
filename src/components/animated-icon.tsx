@@ -77,7 +77,7 @@ export function AnimatedSplashOverlay() {
       style={[styles.splashOverlay, overlayStyle]}>
       <Animated.View style={[styles.splashBlue, blueStyle]} />
       <Animated.View style={logoStyle}>
-        <Image style={styles.splashImage} source={require('@/assets/images/insideOut_image_icon.png')} />
+        <Image style={styles.splashImage} source={require('@/assets/images/Ins_n_Outs_image.png')} />
       </Animated.View>
     </Animated.View>
   );

@@ -6,10 +6,12 @@ import Svg, { Path } from 'react-native-svg';
 import { CalendarDays } from 'lucide-react-native';
 import { useThemeColors } from '../constants/config';
 import PopupBubble from './PopupBubble';
+import { toLocalDateString } from '../utils/date';
 
 // Default day cell that also reports its on-screen position on long press,
 // so the context menu can open directly below the pressed day.
 // While that menu is open (marking.menuOpen), the day stays highlighted as if held down.
+// Today (marking.isToday) gets a blue ring around the day.
 // First days of period (marking.periodStart) get a blood-drop background instead of a circle;
 // if that day is also the selected day, the drop sits inside the selected day's circle.
 function MeasuredDay(props) {
@@ -36,10 +38,12 @@ function MeasuredDay(props) {
         <BloodDrop size={marking.dayIsSelected ? DROP_SIZE_IN_CIRCLE : DROP_SIZE} color={themeColors.danger} />
       )}
       <BasicDay {...props} date={date?.dateString} onLongPress={handleLongPress} />
-      {marking?.menuOpen && <View pointerEvents="none" style={[dayHighlightStyles.ring, { borderColor: themeColors.primary }]} />}
+      {(marking?.menuOpen || marking?.isToday) && <View pointerEvents="none" style={[dayHighlightStyles.ring, { borderColor: themeColors.primary }]} />}
     </View>
   );
 }
+
+const CALENDAR_PADDING = 10;
 
 // The day cell from react-native-calendars is a fixed 32x32
 const DAY_CELL_SIZE = 32;
@@ -68,8 +72,11 @@ const dayHighlightStyles = StyleSheet.create({
 
 export default function CalendarSection({ selectedDate, onDateChange, periodStarts = [], onTogglePeriodStart }) {
   const themeColors = useThemeColors();
-  const [isMonthlyView, setIsMonthlyView] = useState(false);
+  const [isMonthlyView, setIsMonthlyView] = useState(true);
   const [dayMenu, setDayMenu] = useState(null); // { dateString, layout } while the long-press menu is open
+  // WeekCalendar pages default to the full screen width, wider than this card, which pushed
+  // the last day of each week off the right edge. Each page must match the card's inner width.
+  const [weekWidth, setWeekWidth] = useState(null);
 
   // Long-press opens a one-line menu under the pressed day; tapping anywhere else dismisses it
   const handleDayLongPress = ({ dateString, layout }) => setDayMenu({ dateString, layout });
@@ -83,13 +90,20 @@ export default function CalendarSection({ selectedDate, onDateChange, periodStar
   periodStarts.forEach((date) => {
     markedDates[date] = { periodStart: true, dayIsSelected: date === selectedDate, selected: true, selectedColor: 'transparent', selectedTextColor: '#ffffff' };
   });
+  // Ringed by MeasuredDay, so today stays recognizable even under a drop or the selection circle
+  const today = toLocalDateString();
+  markedDates[today] = { ...markedDates[today], isToday: true };
   if (dayMenu) markedDates[dayMenu.dateString] = { ...markedDates[dayMenu.dateString], menuOpen: true };
+
+  const calendarTheme = { calendarBackground: themeColors.card, dayTextColor: themeColors.title, textDisabledColor: themeColors.muted, monthTextColor: themeColors.title, todayTextColor: themeColors.primary, arrowColor: themeColors.primary };
 
   const styles = StyleSheet.create({
     sectionWrapper: { marginVertical: 10 },
     // No shadows here: a shadow on either piece draws a line across the seam between card and tab
-    calendarWrapper: { backgroundColor: themeColors.card, borderRadius: 12, borderBottomRightRadius: 0, padding: 10, minHeight: 110 },
-    toggleTab: { alignSelf: 'flex-end', width: 52, height: 44, borderBottomLeftRadius: 14, borderBottomRightRadius: 14, backgroundColor: themeColors.card },
+    calendarWrapper: { backgroundColor: themeColors.card, borderRadius: 12, borderBottomRightRadius: 0, padding: CALENDAR_PADDING, minHeight: 110 },
+    // Full size but invisible and out of the layout: the week list throws if it has zero size
+    hiddenWeek: { position: 'absolute', top: 0, left: 0, right: 0, opacity: 0 },
+    toggleTab: { alignSelf: 'flex-end', minWidth: 52, paddingHorizontal: 10, height: 44, borderBottomLeftRadius: 14, borderBottomRightRadius: 14, backgroundColor: themeColors.card },
     // Concave corner joining the card's bottom edge to the tab's left side
     tabFillet: { position: 'absolute', top: 0, left: -12, width: 12, height: 12, backgroundColor: themeColors.card },
     tabFilletMask: { flex: 1, backgroundColor: themeColors.background, borderTopRightRadius: 12 },
@@ -104,24 +118,41 @@ export default function CalendarSection({ selectedDate, onDateChange, periodStar
   return (
     <TouchableWithoutFeedback onPress={(e) => e?.stopPropagation?.()}>
       <View style={styles.sectionWrapper}>
-      <View style={styles.calendarWrapper}>
+      <View
+        style={styles.calendarWrapper}
+        onLayout={(e) => setWeekWidth(e.nativeEvent.layout.width - CALENDAR_PADDING * 2)}
+      >
         <CalendarProvider date={selectedDate} onDateChanged={onDateChange}>
-          {isMonthlyView ? (
+          {isMonthlyView && (
             <Calendar
               current={selectedDate}
               markedDates={markedDates}
+              // Unlike WeekCalendar, the month grid doesn't report presses through CalendarProvider
+              onDayPress={(day) => onDateChange(day.dateString)}
               onDayLongPress={handleDayLongPress}
               dayComponent={MeasuredDay}
-              theme={{ calendarBackground: themeColors.card, dayTextColor: themeColors.title, textDisabledColor: themeColors.muted, monthTextColor: themeColors.title, todayTextColor: themeColors.primary, arrowColor: themeColors.primary }}
+              theme={calendarTheme}
             />
-          ) : (
-            <WeekCalendar
-              current={selectedDate}
-              markedDates={markedDates}
-              onDayLongPress={handleDayLongPress}
-              dayComponent={MeasuredDay}
-              theme={{ calendarBackground: themeColors.card, dayTextColor: themeColors.title, textDisabledColor: themeColors.muted, monthTextColor: themeColors.title, todayTextColor: themeColors.primary, arrowColor: themeColors.primary }}
-            />
+          )}
+          {/* Stays mounted (hidden) behind the month grid: it has to lay out and measure itself before
+              drawing, which took over half a second on every switch. It follows date changes through
+              CalendarProvider. */}
+          {weekWidth !== null && (
+            <View
+              style={isMonthlyView && styles.hiddenWeek}
+              pointerEvents={isMonthlyView ? 'none' : 'auto'}
+              importantForAccessibility={isMonthlyView ? 'no-hide-descendants' : 'auto'}
+              accessibilityElementsHidden={isMonthlyView}
+            >
+              <WeekCalendar
+                calendarWidth={weekWidth}
+                current={selectedDate}
+                markedDates={markedDates}
+                onDayLongPress={handleDayLongPress}
+                dayComponent={MeasuredDay}
+                theme={calendarTheme}
+              />
+            </View>
           )}
         </CalendarProvider>
       </View>
@@ -131,7 +162,7 @@ export default function CalendarSection({ selectedDate, onDateChange, periodStar
             <View style={styles.tabFilletMask} />
           </View>
 
-          {/* Shows the view it switches to: month grid while weekly, SUN/MON while monthly */}
+          {/* Shows the view it switches to: month grid while weekly, WEEKLY while monthly */}
           <TouchableOpacity
             style={styles.toggleCalendarBtn}
             onPress={() => setIsMonthlyView(!isMonthlyView)}
@@ -139,10 +170,7 @@ export default function CalendarSection({ selectedDate, onDateChange, periodStar
           >
             {isMonthlyView
               ? (
-                <View>
-                  <Text style={styles.weekIconText}>SUN</Text>
-                  <Text style={styles.weekIconText}>MON</Text>
-                </View>
+                <Text style={styles.weekIconText} numberOfLines={1}>WEEKLY</Text>
               )
               : <CalendarDays size={22} color={themeColors.primary} />}
           </TouchableOpacity>

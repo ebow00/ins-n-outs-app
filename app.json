@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "InsideOut",
-    "slug": "insideout",
+    "name": "In's n Out's",
+    "slug": "ins_n_outs",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "insideout",
+    "scheme": "insnouts",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon"
@@ -18,7 +18,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.insideout"
+      "package": "com.anonymous.ins_n_outs"
     },
     "web": {
       "output": "server",
