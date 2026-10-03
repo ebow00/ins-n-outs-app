@@ -1,66 +1,30 @@
 import { useEffect } from 'react';
-import { AppState } from 'react-native';
 
-import { requestCalories } from '../utils/caloriesApi';
+import { pingCaloriesApi } from '../utils/caloriesApi';
 import { logInternal } from '../utils/internalLog';
 
-const KEEP_ALIVE_INTERVAL_MS = 60 * 60 * 1000;
-// Generous on purpose: absorbing the slow cold start is the point of the probes
-const PROBE_TIMEOUT_MS = 60000;
+// Generous on purpose: absorbing the slow cold start is the point of the ping
+const PING_TIMEOUT_MS = 60000;
 
-const PROBES = [
-  { label: 'en-valid', foodText: '2 eggs and a slice of whole wheat bread', expectInvalid: false },
-  { label: 'en-invalid', foodText: 'a plastic chair', expectInvalid: true },
-  { label: 'he-valid', foodText: 'שתי ביצים ופרוסת לחם מלא', expectInvalid: false },
-  { label: 'he-invalid', foodText: 'כיסא פלסטיק', expectInvalid: true },
-];
+// Module-level so remounts (e.g. Fast Refresh) don't ping again within the same launch
+let pinged = false;
 
-async function runProbe({ label, foodText, expectInvalid }, signal) {
-  const startedAt = Date.now();
-  const result = await requestCalories(foodText, { timeoutMs: PROBE_TIMEOUT_MS, signal });
-  const durationMs = Date.now() - startedAt;
-
-  if (result.kind === 'aborted') return;
-  if (result.kind !== 'ok') {
-    logInternal(`keepalive_${result.kind}`, { probe: label, durationMs, status: result.status, message: result.message });
-    return;
-  }
-
-  const gotInvalid = result.data.invalid === true;
-  logInternal(gotInvalid === expectInvalid ? 'keepalive_ok' : 'keepalive_unexpected', {
-    probe: label,
-    durationMs,
-    expectInvalid,
-    gotInvalid,
-    ingredientCount: result.data.ingredients?.length ?? 0
-  });
-}
-
-// Warms the API route and model on launch, then hourly, so the user's first real request doesn't time out
+// Pings the API route once per launch so the user's first real request doesn't hit a cold start.
+// The ping doesn't send a chat completion, so it costs none of OpenRouter's free-model daily requests.
 export function useApiKeepAlive() {
   useEffect(() => {
-    let lastRunAt = 0;
-    let controller = null;
+    if (pinged) return;
+    pinged = true;
 
-    const runIfStale = () => {
-      if (Date.now() - lastRunAt < KEEP_ALIVE_INTERVAL_MS) return;
-      lastRunAt = Date.now();
-      controller?.abort();
-      controller = new AbortController();
-      PROBES.forEach((probe) => runProbe(probe, controller.signal));
-    };
-
-    runIfStale();
-    const interval = setInterval(runIfStale, KEEP_ALIVE_INTERVAL_MS);
-    // Timers are paused while backgrounded, so catch up on returning to the app
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') runIfStale();
+    const startedAt = Date.now();
+    pingCaloriesApi({ timeoutMs: PING_TIMEOUT_MS }).then((result) => {
+      const durationMs = Date.now() - startedAt;
+      if (result.kind !== 'ok') {
+        logInternal(`keepalive_${result.kind}`, { durationMs, status: result.status, message: result.message });
+        return;
+      }
+      const { isFreeTier, usage, limitRemaining } = result.data;
+      logInternal('keepalive_ok', { durationMs, isFreeTier, usage, limitRemaining });
     });
-
-    return () => {
-      clearInterval(interval);
-      subscription.remove();
-      controller?.abort();
-    };
   }, []);
 }

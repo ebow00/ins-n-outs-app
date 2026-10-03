@@ -39,6 +39,35 @@ function toIngredient(value: unknown): Ingredient | null {
   return { hebrewName: hebrewName.trim(), englishName: englishName.trim(), calories: Math.round(kcal) };
 }
 
+// Launch ping: wakes this route and checks the key against OpenRouter's key-status endpoint,
+// which doesn't count against the free-model request limits (unlike any chat completion)
+export async function GET() {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    return Response.json({ error: 'Server is missing its API key' }, { status: 500 });
+  }
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/key', {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!response.ok) {
+      return Response.json({ error: `OpenRouter key check failed (${response.status})` }, { status: 502 });
+    }
+    const { data } = await response.json();
+    // Only usage figures go back to the app, never key details
+    return Response.json({
+      ok: true,
+      isFreeTier: data?.is_free_tier ?? null,
+      usage: data?.usage ?? null,
+      limitRemaining: data?.limit_remaining ?? null,
+    });
+  } catch (error) {
+    console.error('[API] Key check error:', error);
+    return Response.json({ error: 'Could not reach OpenRouter' }, { status: 502 });
+  }
+}
+
 export async function POST(request: Request) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
@@ -102,6 +131,15 @@ export async function POST(request: Request) {
     console.log(`[API] ${MODEL} parsed ${ingredients.length} ingredient(s).`);
     return Response.json({ invalid: false, ingredients });
   } catch (error) {
+    // Out of free-model requests: report it plainly, with the reset time when OpenRouter gives one
+    if (error instanceof OpenAI.APIError && error.status === 429) {
+      const reset = Number(error.headers?.get('x-ratelimit-reset'));
+      console.warn(`[API] OpenRouter rate limit reached: ${error.message}`);
+      return Response.json(
+        { error: 'Rate limit reached', rateLimited: true, resetAt: Number.isFinite(reset) && reset > 0 ? reset : null },
+        { status: 429 }
+      );
+    }
     console.error("[API] Fatal Route Error:", error);
     return Response.json({ error: 'Failed to process request with OpenRouter' }, { status: 500 });
   }

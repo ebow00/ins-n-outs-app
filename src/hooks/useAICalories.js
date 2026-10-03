@@ -17,6 +17,12 @@ const FAILED_RESULT = { calories: 0, ingredients: [], isValid: false };
 const GENERIC_ERROR = "Something went wrong, please try again";
 const CONNECTION_ERROR = "Can't reach out, please check your connection and try again";
 
+function rateLimitError(resetAt) {
+  if (!resetAt) return "Daily calculation limit reached, please try again tomorrow";
+  const time = new Date(resetAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return `Daily calculation limit reached, please try again after ${time}`;
+}
+
 export function useAICalories() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [statusMessage, setStatusMessage] = useState(null);
@@ -59,7 +65,8 @@ export function useAICalories() {
 
       if (result.kind !== 'ok') {
         logInternal(`calories_${result.kind}`, { durationMs: Date.now() - startedAt, status: result.status, message: result.message });
-        setError(result.kind === 'network' ? CONNECTION_ERROR : GENERIC_ERROR);
+        if (result.status === 429) setError(rateLimitError(result.resetAt));
+        else setError(result.kind === 'network' ? CONNECTION_ERROR : GENERIC_ERROR);
         return FAILED_RESULT;
       }
 
